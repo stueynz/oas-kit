@@ -25,6 +25,12 @@ let argv = require('yargs')
     .describe('verbose','increase verbosity')
     .string('droprefs')
     .describe('droprefs', 'regexp for $refs to be left unresolved')
+    .boolean('resolveInternal')
+    .describe('resolveInternal', 'resolve all internal references')
+    .boolean('jsonOutput')
+    .describe('jsonOutput', 'write result as JSON rather than yaml')
+    .boolean('yamlMerge')
+    .describe('yamlMerge', 'resolve yaml merge key <<  see https://yaml.org/type/merge.html')
     .demand(1)
     .argv;
 
@@ -37,18 +43,26 @@ if (argv.quiet) options.verbose = options.verbose - argv.quiet;
 options.fatal = true;
 
 options.dropRefs = argv.droprefs ? new RegExp(argv.droprefs, 'g') : null;
+options.resolveInternal = argv.resolveInternal;
+options.jsonOutput = argv.jsonOutput;
+options.yamlMerge = argv.yamlMerge;
 
 if (filespec.startsWith('https')) options.agent = new https.Agent({ keepAlive: true })
 else if (filespec.startsWith('http')) options.agent = new http.Agent({ keepAlive: true });
 
 function main(str,source,options){
-    let input = yaml.parse(str,{schema:'core'});
+    let input = yaml.parse(str,{schema:'core', merge:options.yamlMerge});
     resolver.resolve(input,source,options)
     .then(function(options){
         if (options.agent) {
             options.agent.destroy();
         }
-        fs.writeFileSync(argv.output,yaml.stringify(options.openapi),'utf8');
+        if(options.jsonOutput) {
+            fs.writeFileSync(argv.output, JSON.stringify(options.openapi, null, 2),'utf8');
+        }
+        else {
+            fs.writeFileSync(argv.output,yaml.stringify(options.openapi),'utf8');
+        }
     })
     .catch(function(err){
         console.warn(err);
