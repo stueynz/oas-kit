@@ -40,42 +40,47 @@ function resolveAllFragment(obj, context, src, parentPath, base, options) {
         changes = 0;
         recurse(obj, {identityDetection:true}, function (obj, key, state) {
             if (isRef(obj, key)) {
-                if (obj[key].startsWith('#')) {
-                    if (!seen[obj[key]] && !obj.$fixed) {
-                        let target = clone(jptr(context, obj[key]));
-                        if (options.verbose>1) console.warn((target === false ? common.colour.red : common.colour.green)+'Fragment resolution', obj[key], common.colour.normal);
-                        /*
-                            ResolutionCase:A is where there is a local reference in an externally
-                            referenced document, and we have not seen it before. The reference
-                            is replaced by a copy of the data pointed to, which may be outside this fragment
-                            but within the context of the external document
-                        */
-                        if (target === false) {
-                            state.parent[state.pkey] = {}; /* case:A(2) where the resolution fails */
-                            if (options.fatal) {
-                                let ex = new Error('Fragment $ref resolution failed '+obj[key]);
-                                if (options.promise) options.promise.reject(ex)
-                                else throw(ex);
+                if (obj[key].startsWith('#') ) {
+                    if (options.dropRefs && obj[key].toString().match(options.dropRefs) != null) {
+                        if (options.verbose>1) console.warn(common.colour.yellow+'Not resolving fragment ', obj[key], common.colour.normal);
+                    }
+                    else {
+                        if (!seen[obj[key]] && !obj.$fixed) {
+                            let target = clone(jptr(context, obj[key]));
+                            if (options.verbose>1) console.warn((target === false ? common.colour.red : common.colour.green)+'Fragment resolution', obj[key], common.colour.normal);
+                            /*
+                                ResolutionCase:A is where there is a local reference in an externally
+                                referenced document, and we have not seen it before. The reference
+                                is replaced by a copy of the data pointed to, which may be outside this fragment
+                                but within the context of the external document
+                            */
+                            if (target === false) {
+                                state.parent[state.pkey] = {}; /* case:A(2) where the resolution fails */
+                                if (options.fatal) {
+                                    let ex = new Error('Fragment $ref resolution failed '+obj[key]);
+                                    if (options.promise) options.promise.reject(ex)
+                                    else throw(ex);
+                                }
+                            }
+                            else {
+                                changes++;
+                                state.parent[state.pkey] = target;
+                                seen[obj[key]] = state.path.replace('/%24ref','');
                             }
                         }
                         else {
-                            changes++;
-                            state.parent[state.pkey] = target;
-                            seen[obj[key]] = state.path.replace('/%24ref','');
+                            if (!obj.$fixed) {
+                                let newRef = (attachPoint+'/'+seen[obj[key]]).split('/#/').join('/');
+                                state.parent[state.pkey] = { $ref: newRef, 'x-miro': obj[key], $fixed: true };
+                                if (options.verbose>1) console.warn('Replacing with',newRef);
+                                changes++;
+                            }
+                            /*
+                                ResolutionCase:B is where there is a local reference in an externally
+                                referenced document, and we have seen this reference before and resolved it.
+                                We create a new object containing the (immutable) $ref string
+                            */
                         }
-                    }
-                    else {
-                        if (!obj.$fixed) {
-                            let newRef = (attachPoint+'/'+seen[obj[key]]).split('/#/').join('/');
-                            state.parent[state.pkey] = { $ref: newRef, 'x-miro': obj[key], $fixed: true };
-                            if (options.verbose>1) console.warn('Replacing with',newRef);
-                            changes++;
-                        }
-                        /*
-                            ResolutionCase:B is where there is a local reference in an externally
-                            referenced document, and we have seen this reference before and resolved it.
-                            We create a new object containing the (immutable) $ref string
-                        */
                     }
                 }
                 else if (baseUrl.protocol) {
